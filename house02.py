@@ -1,147 +1,164 @@
 import streamlit as st
 import pandas as pd
-import pydeck as pdk
 import joblib
-import numpy as np
 
-# Load the model and scaler
-model = joblib.load('best_model.pkl')
-scaler = joblib.load('scaler.pkl')
+# Load trained model and scaler
+model = joblib.load("best_model.pkl")
+scaler = joblib.load("scaler.pkl")
 
-st.title("🏡 Home Worth-Smart predictions")
+# Page settings
+st.set_page_config(
+    page_title="Home Worth-Smart",
+    page_icon="🏠",
+    layout="wide"
+)
 
-# Sidebar inputs
-st.sidebar.header("Enter House Features")
+# Title
+st.title("🏠 Home Worth-Smart Predictions")
+st.write("Enter the property details below to estimate its price.")
 
-# 📍 Location and Property Type
-location = st.sidebar.selectbox("Select Location Type", ["Urban", "Suburban", "Rural"])
-property_type = st.sidebar.selectbox("Property Type", ["Residential", "Commercial", "Apartment"])
+# Sidebar
+st.sidebar.header("🏡 Property Details")
 
-# 🛠️ House Features (Blank Inputs)
-size = st.sidebar.text_input("Size (sq ft)", "")
-bedrooms = st.sidebar.text_input("Bedrooms", "")
-bathrooms = st.sidebar.text_input("Bathrooms", "")
-age = st.sidebar.text_input("Age of House (years)", "")
-latitude = st.sidebar.text_input("Latitude", "")
-longitude = st.sidebar.text_input("Longitude", "")
-amenity_proximity = st.sidebar.text_input("Proximity to amenities (km)", "")
+location = st.sidebar.selectbox(
+    "Location Type",
+    ["Urban", "Suburban", "Rural"]
+)
 
-# ✅ Real-time Map Section
-st.subheader("📍 Real-Time Location Map")
+property_type = st.sidebar.selectbox(
+    "Property Type",
+    ["Residential", "Commercial", "Apartment"]
+)
 
-try:
-    if latitude and longitude:
-        lat = float(latitude)
-        lon = float(longitude)
+size = st.sidebar.number_input(
+    "Size (sq ft)",
+    min_value=100,
+    max_value=10000,
+    value=1500,
+    step=100
+)
 
-        # Display map with a marker
-        map_layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=pd.DataFrame({"lat": [lat], "lon": [lon]}),
-            get_position=["lon", "lat"],
-            get_color=[255, 0, 0, 160],  # Red marker
-            get_radius=150,
-        )
+bedrooms = st.sidebar.number_input(
+    "Bedrooms",
+    min_value=1,
+    max_value=10,
+    value=3,
+    step=1
+)
 
-        map_view = pdk.ViewState(
-            latitude=lat,
-            longitude=lon,
-            zoom=12,
-            pitch=45,
-        )
+bathrooms = st.sidebar.number_input(
+    "Bathrooms",
+    min_value=1,
+    max_value=10,
+    value=2,
+    step=1
+)
 
-        st.pydeck_chart(pdk.Deck(
-            layers=[map_layer],
-            initial_view_state=map_view,
-            map_style='mapbox://styles/mapbox/streets-v11'
-        ))
-    else:
-        st.warning("Enter latitude and longitude to view the map.")
+age = st.sidebar.number_input(
+    "Age of House (years)",
+    min_value=0,
+    max_value=100,
+    value=5,
+    step=1
+)
 
-except ValueError:
-    st.error("Please enter valid latitude and longitude coordinates.")
+latitude = st.sidebar.number_input(
+    "Latitude",
+    min_value=-90.0,
+    max_value=90.0,
+    value=17.3850,
+    format="%.4f"
+)
 
-# ✅ Location Multiplier Logic
-location_multiplier = {
-    "Urban": 1.3,       # Higher prices
-    "Suburban": 1.1,    # Moderate prices
-    "Rural": 0.9        # Lower prices
-}
+longitude = st.sidebar.number_input(
+    "Longitude",
+    min_value=-180.0,
+    max_value=180.0,
+    value=78.4867,
+    format="%.4f"
+)
 
-# ✅ Property Type Multiplier Logic
-property_multiplier = {
-    "Commercial": 1.5,   # Highest price per sqft
-    "Residential": 1.0,  # Standard price
-    "Apartment": 0.8     # Lower price per sqft
-}
+amenity_proximity = st.sidebar.number_input(
+    "Proximity to amenities (km)",
+    min_value=0.1,
+    max_value=100.0,
+    value=2.0,
+    step=0.5
+)
 
-# 🛠️ Centering the "Predict Price" button using columns
-col1, col2, col3 = st.columns([1, 2, 1])
+# Prediction button
+st.subheader("🔮 Price Prediction")
 
-prediction = None
+if st.button("PREDICT HOUSE PRICE", use_container_width=True):
 
-with col2:
-    if st.button("🔮 **PREDICT PRICE**", help="Click to estimate the house price", use_container_width=True):
-        try:
-            # Ensure all fields are filled
-            if not (size and bedrooms and bathrooms and age and latitude and longitude and amenity_proximity):
-                st.error("Please fill in all fields before predicting.")
-            else:
-                # Convert inputs
-                size = int(size)
-                bedrooms = int(bedrooms)
-                bathrooms = int(bathrooms)
-                age = int(age)
-                latitude = float(latitude)
-                longitude = float(longitude)
-                amenity_proximity = float(amenity_proximity)
+    # Feature engineering
+    features = pd.DataFrame({
+        "latitude": [latitude],
+        "longitude": [longitude],
+        "size": [size],
+        "bedrooms": [bedrooms],
+        "bathrooms": [bathrooms],
+        "age": [age],
+        "amenity_proximity": [amenity_proximity],
+        "size_bedrooms": [size * bedrooms],
+        "size_bathrooms": [size * bathrooms],
+        "inverse_age": [1 / (age + 1)],
+        "inverse_proximity": [1 / (amenity_proximity + 0.1)]
+    })
 
-                # ✅ Apply transformations
-                features = pd.DataFrame({
-                    'latitude': [latitude],
-                    'longitude': [longitude],
-                    'size': [size],
-                    'bedrooms': [bedrooms],
-                    'bathrooms': [bathrooms],
-                    'age': [age],
-                    'amenity_proximity': [amenity_proximity],
-                    'size_bedrooms': [size * bedrooms],
-                    'size_bathrooms': [size * bathrooms],
-                    'inverse_age': [1 / (age + 1)],
-                    'inverse_proximity': [1 / (amenity_proximity + 0.1)]
-                })
+    # Scale features
+    features_scaled = scaler.transform(features)
 
-                # Scale the features
-                features_scaled = scaler.transform(features)
+    # Model prediction
+    base_prediction = model.predict(features_scaled)[0]
 
-                # ML model prediction
-                base_prediction = model.predict(features_scaled)[0]
+    # Location multipliers
+    location_multiplier = {
+        "Urban": 1.3,
+        "Suburban": 1.1,
+        "Rural": 0.9
+    }
 
-                # ✅ Apply location and property multipliers
-                location_factor = location_multiplier.get(location, 1.0)
-                property_factor = property_multiplier.get(property_type, 1.0)
+    # Property type multipliers
+    property_multiplier = {
+        "Commercial": 1.5,
+        "Residential": 1.0,
+        "Apartment": 0.8
+    }
 
-                # ✅ Final price calculation
-                final_price = base_prediction * location_factor * property_factor
-                prediction = final_price
-
-        except ValueError:
-            st.error("Please enter valid numeric values for all fields.")
-
-# ✅ Display the predicted price ABOVE the sample dataset with enhanced styling
-if prediction is not None:
-    st.markdown(
-        f"""
-        <div style="text-align: center; margin-top: 20px; padding: 20px; border-radius: 10px; 
-        background-color: #f0f2f6; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);">
-            <h2 style="color: #4CAF50;">🏠 Estimated Price: <strong>${prediction:,.2f}</strong></h2>
-            <p style="color: #000;">📍 Location: <strong>{location}</strong> | 🏢 Property Type: <strong>{property_type}</strong></p>
-        </div>
-        """,
-        unsafe_allow_html=True
+    # Final prediction
+    final_price = (
+        base_prediction
+        * location_multiplier[location]
+        * property_multiplier[property_type]
     )
 
-# ✅ Display the sample dataset option below the prediction
-if st.checkbox("Show sample dataset"):
-    data = pd.read_csv('house_data.csv')
-    st.write(data.head())
+    # Display result
+    st.success("Prediction completed successfully!")
+
+    st.metric(
+        label="🏠 Estimated House Price",
+        value=f"₹{final_price:,.0f}"
+    )
+
+    st.write(
+        f"**Location:** {location}  |  "
+        f"**Property Type:** {property_type}"
+    )
+
+    # Location map
+    st.subheader("📍 Property Location")
+
+    map_data = pd.DataFrame({
+        "latitude": [latitude],
+        "longitude": [longitude]
+    })
+
+    st.map(map_data, zoom=11)
+
+# Dataset section
+st.divider()
+
+with st.expander("📊 View Sample Dataset"):
+    data = pd.read_csv("house_data.csv")
+    st.dataframe(data.head(10), use_container_width=True)
